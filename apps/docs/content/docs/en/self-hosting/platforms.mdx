@@ -17,6 +17,35 @@ After deployment, add environment variables in Railway dashboard:
 - `OPENAI_API_KEY` or other AI provider keys
 - Custom domain in Settings → Networking
 
+## Google Cloud Run
+
+Use the repository helper script to deploy both Sim services on Cloud Run.
+
+```bash
+git clone https://github.com/simstudioai/sim.git
+cd sim
+
+./scripts/deploy-cloud-run.sh \
+  --project your-gcp-project \
+  --region us-central1 \
+  --db-url 'postgresql://user:pass@host:5432/simstudio?sslmode=require' \
+  --app-url 'https://sim.yourdomain.com'
+```
+
+What the script does:
+- Enables Cloud Run, Cloud Build, and Artifact Registry APIs
+- Builds and pushes `docker/app.Dockerfile` and `docker/realtime.Dockerfile`
+- Deploys `<service-prefix>-app` and `<service-prefix>-realtime`
+- Generates required auth/encryption secrets for the app service
+
+Optional flags:
+- `--service-prefix` (default `sim`)
+- `--image-repo` (default `sim`)
+- `--socket-url` to override socket URL
+- `--copilot-api-key`
+
+> For production, use a managed PostgreSQL database with pgvector (for example Cloud SQL + pgvector).
+
 ## VPS Deployment
 
 For DigitalOcean, AWS EC2, Azure VMs, or any Linux server:
