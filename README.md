@@ -101,6 +101,24 @@ On Linux, use your host's IP address or add `extra_hosts: ["host.docker.internal
 
 Sim supports [vLLM](https://docs.vllm.ai/) for self-hosted models. Set `VLLM_BASE_URL` and optionally `VLLM_API_KEY` in your environment.
 
+
+### Self-hosted: Google Cloud Run
+
+You can deploy both the web app and realtime socket service to Cloud Run with one script:
+
+```bash
+git clone https://github.com/simstudioai/sim.git
+cd sim
+
+./scripts/deploy-cloud-run.sh \
+  --project your-gcp-project \
+  --region us-central1 \
+  --db-url 'postgresql://user:pass@host:5432/simstudio?sslmode=require' \
+  --app-url 'https://sim.yourdomain.com'
+```
+
+The script builds `docker/app.Dockerfile` and `docker/realtime.Dockerfile` via Cloud Build config (no root-level `Dockerfile` required), pushes images to Artifact Registry, and deploys two Cloud Run services (`sim-app` and `sim-realtime`).
+
 ### Self-hosted: Dev Containers
 
 1. Open VS Code with the [Remote - Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
