@@ -8,6 +8,7 @@
 | [@sim/db](./db) | Database schema and Drizzle ORM utilities |
 | [@sim/logger](./logger) | Structured logging with colored output |
 | [@sim/testing](./testing) | Test factories, builders, and assertions |
+| [@simstudio/agentnxxt-console](./agentnxxt-console) | Minimal AgentNXXT console scaffold package |
 
 ## Published
 
