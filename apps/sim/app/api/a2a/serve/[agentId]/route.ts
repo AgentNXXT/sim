@@ -708,7 +708,7 @@ async function handleMessageStream(
         if (response.body && isStreamingResponse) {
           const reader = response.body.getReader()
           const decoder = new TextDecoder()
-          let accumulatedContent = ''
+          const contentChunks: string[] = []
           let finalContent: string | undefined
 
           while (true) {
@@ -719,7 +719,7 @@ async function handleMessageStream(
             const parsed = parseWorkflowSSEChunk(rawChunk)
 
             if (parsed.content) {
-              accumulatedContent += parsed.content
+              contentChunks.push(parsed.content)
               sendEvent('message', {
                 kind: 'message',
                 taskId,
@@ -735,6 +735,7 @@ async function handleMessageStream(
             }
           }
 
+          const accumulatedContent = contentChunks.join('')
           const messageContent =
             (finalContent !== undefined && finalContent.length > 0
               ? finalContent
@@ -844,6 +845,7 @@ async function handleMessageStream(
         controller.close()
       }
     },
+    cancel() {},
   })
 
   return new NextResponse(stream, {
@@ -1016,13 +1018,25 @@ async function handleTaskResubscribe(
   let pollTimeoutId: ReturnType<typeof setTimeout> | null = null
 
   const abortSignal = request.signal
-  abortSignal.addEventListener('abort', () => {
+  abortSignal.addEventListener(
+    'abort',
+    () => {
+      isCancelled = true
+      if (pollTimeoutId) {
+        clearTimeout(pollTimeoutId)
+        pollTimeoutId = null
+      }
+    },
+    { once: true }
+  )
+
+  const cleanup = () => {
     isCancelled = true
     if (pollTimeoutId) {
       clearTimeout(pollTimeoutId)
       pollTimeoutId = null
     }
-  })
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -1038,14 +1052,6 @@ async function handleTaskResubscribe(
           logger.error('Error sending SSE event:', error)
           isCancelled = true
           return false
-        }
-      }
-
-      const cleanup = () => {
-        isCancelled = true
-        if (pollTimeoutId) {
-          clearTimeout(pollTimeoutId)
-          pollTimeoutId = null
         }
       }
 
@@ -1160,11 +1166,7 @@ async function handleTaskResubscribe(
       poll()
     },
     cancel() {
-      isCancelled = true
-      if (pollTimeoutId) {
-        clearTimeout(pollTimeoutId)
-        pollTimeoutId = null
-      }
+      cleanup()
     },
   })
 

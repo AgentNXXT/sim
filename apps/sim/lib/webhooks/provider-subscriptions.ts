@@ -5,7 +5,11 @@ import { eq } from 'drizzle-orm'
 import type { NextRequest } from 'next/server'
 import { validateAirtableId, validateAlphanumericId } from '@/lib/core/security/input-validation'
 import { getBaseUrl } from '@/lib/core/utils/urls'
-import { getOAuthToken, refreshAccessTokenIfNeeded } from '@/app/api/auth/oauth/utils'
+import {
+  getOAuthToken,
+  refreshAccessTokenIfNeeded,
+  resolveOAuthAccountId,
+} from '@/app/api/auth/oauth/utils'
 
 const teamsLogger = createLogger('TeamsSubscription')
 const telegramLogger = createLogger('TelegramWebhook')
@@ -13,8 +17,10 @@ const airtableLogger = createLogger('AirtableWebhook')
 const typeformLogger = createLogger('TypeformWebhook')
 const calendlyLogger = createLogger('CalendlyWebhook')
 const grainLogger = createLogger('GrainWebhook')
+const fathomLogger = createLogger('FathomWebhook')
 const lemlistLogger = createLogger('LemlistWebhook')
 const webflowLogger = createLogger('WebflowWebhook')
+const attioLogger = createLogger('AttioWebhook')
 const providerSubscriptionsLogger = createLogger('WebhookProviderSubscriptions')
 
 function getProviderConfig(webhook: any): Record<string, any> {
@@ -25,14 +31,21 @@ function getNotificationUrl(webhook: any): string {
   return `${getBaseUrl()}/api/webhooks/trigger/${webhook.path}`
 }
 
-async function getCredentialOwnerUserId(
+async function getCredentialOwner(
   credentialId: string,
   requestId: string
-): Promise<string | null> {
+): Promise<{ userId: string; accountId: string } | null> {
+  const resolved = await resolveOAuthAccountId(credentialId)
+  if (!resolved) {
+    providerSubscriptionsLogger.warn(
+      `[${requestId}] Failed to resolve OAuth account for credentialId ${credentialId}`
+    )
+    return null
+  }
   const [credentialRecord] = await db
     .select({ userId: account.userId })
     .from(account)
-    .where(eq(account.id, credentialId))
+    .where(eq(account.id, resolved.accountId))
     .limit(1)
 
   if (!credentialRecord?.userId) {
@@ -42,7 +55,7 @@ async function getCredentialOwnerUserId(
     return null
   }
 
-  return credentialRecord.userId
+  return { userId: credentialRecord.userId, accountId: resolved.accountId }
 }
 
 /**
@@ -80,9 +93,9 @@ export async function createTeamsSubscription(
     )
   }
 
-  const credentialOwnerUserId = await getCredentialOwnerUserId(credentialId, requestId)
-  const accessToken = credentialOwnerUserId
-    ? await refreshAccessTokenIfNeeded(credentialId, credentialOwnerUserId, requestId)
+  const credentialOwner = await getCredentialOwner(credentialId, requestId)
+  const accessToken = credentialOwner
+    ? await refreshAccessTokenIfNeeded(credentialOwner.accountId, credentialOwner.userId, requestId)
     : null
   if (!accessToken) {
     teamsLogger.error(
@@ -216,9 +229,13 @@ export async function deleteTeamsSubscription(
       return
     }
 
-    const credentialOwnerUserId = await getCredentialOwnerUserId(credentialId, requestId)
-    const accessToken = credentialOwnerUserId
-      ? await refreshAccessTokenIfNeeded(credentialId, credentialOwnerUserId, requestId)
+    const credentialOwner = await getCredentialOwner(credentialId, requestId)
+    const accessToken = credentialOwner
+      ? await refreshAccessTokenIfNeeded(
+          credentialOwner.accountId,
+          credentialOwner.userId,
+          requestId
+        )
       : null
     if (!accessToken) {
       teamsLogger.warn(
@@ -407,9 +424,13 @@ export async function deleteAirtableWebhook(
       return
     }
 
-    const credentialOwnerUserId = await getCredentialOwnerUserId(credentialId, requestId)
-    const accessToken = credentialOwnerUserId
-      ? await refreshAccessTokenIfNeeded(credentialId, credentialOwnerUserId, requestId)
+    const credentialOwner = await getCredentialOwner(credentialId, requestId)
+    const accessToken = credentialOwner
+      ? await refreshAccessTokenIfNeeded(
+          credentialOwner.accountId,
+          credentialOwner.userId,
+          requestId
+        )
       : null
     if (!accessToken) {
       airtableLogger.warn(
@@ -773,6 +794,60 @@ export async function deleteGrainWebhook(webhook: any, requestId: string): Promi
 }
 
 /**
+ * Delete a Fathom webhook
+ * Don't fail webhook deletion if cleanup fails
+ */
+export async function deleteFathomWebhook(webhook: any, requestId: string): Promise<void> {
+  try {
+    const config = getProviderConfig(webhook)
+    const apiKey = config.apiKey as string | undefined
+    const externalId = config.externalId as string | undefined
+
+    if (!apiKey) {
+      fathomLogger.warn(
+        `[${requestId}] Missing apiKey for Fathom webhook deletion ${webhook.id}, skipping cleanup`
+      )
+      return
+    }
+
+    if (!externalId) {
+      fathomLogger.warn(
+        `[${requestId}] Missing externalId for Fathom webhook deletion ${webhook.id}, skipping cleanup`
+      )
+      return
+    }
+
+    const idValidation = validateAlphanumericId(externalId, 'Fathom webhook ID', 100)
+    if (!idValidation.isValid) {
+      fathomLogger.warn(
+        `[${requestId}] Invalid externalId format for Fathom webhook deletion ${webhook.id}, skipping cleanup`
+      )
+      return
+    }
+
+    const fathomApiUrl = `https://api.fathom.ai/external/v1/webhooks/${externalId}`
+
+    const fathomResponse = await fetch(fathomApiUrl, {
+      method: 'DELETE',
+      headers: {
+        'X-Api-Key': apiKey,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!fathomResponse.ok && fathomResponse.status !== 404) {
+      fathomLogger.warn(
+        `[${requestId}] Failed to delete Fathom webhook (non-fatal): ${fathomResponse.status}`
+      )
+    } else {
+      fathomLogger.info(`[${requestId}] Successfully deleted Fathom webhook ${externalId}`)
+    }
+  } catch (error) {
+    fathomLogger.warn(`[${requestId}] Error deleting Fathom webhook (non-fatal)`, error)
+  }
+}
+
+/**
  * Delete a Lemlist webhook
  * Don't fail webhook deletion if cleanup fails
  */
@@ -917,9 +992,13 @@ export async function deleteWebflowWebhook(
       return
     }
 
-    const credentialOwnerUserId = await getCredentialOwnerUserId(credentialId, requestId)
-    const accessToken = credentialOwnerUserId
-      ? await refreshAccessTokenIfNeeded(credentialId, credentialOwnerUserId, requestId)
+    const credentialOwner = await getCredentialOwner(credentialId, requestId)
+    const accessToken = credentialOwner
+      ? await refreshAccessTokenIfNeeded(
+          credentialOwner.accountId,
+          credentialOwner.userId,
+          requestId
+        )
       : null
     if (!accessToken) {
       webflowLogger.warn(
@@ -950,6 +1029,203 @@ export async function deleteWebflowWebhook(
     }
   } catch (error) {
     webflowLogger.warn(`[${requestId}] Error deleting Webflow webhook (non-fatal)`, error)
+  }
+}
+
+export async function createAttioWebhookSubscription(
+  userId: string,
+  webhookData: any,
+  requestId: string
+): Promise<{ externalId: string; webhookSecret: string } | undefined> {
+  try {
+    const { path, providerConfig } = webhookData
+    const { triggerId, credentialId } = providerConfig || {}
+
+    if (!credentialId) {
+      attioLogger.warn(`[${requestId}] Missing credentialId for Attio webhook creation.`, {
+        webhookId: webhookData.id,
+      })
+      throw new Error(
+        'Attio account connection required. Please connect your Attio account in the trigger configuration and try again.'
+      )
+    }
+
+    const credentialOwner = await getCredentialOwner(credentialId, requestId)
+    const accessToken = credentialOwner
+      ? await refreshAccessTokenIfNeeded(
+          credentialOwner.accountId,
+          credentialOwner.userId,
+          requestId
+        )
+      : null
+
+    if (!accessToken) {
+      attioLogger.warn(
+        `[${requestId}] Could not retrieve Attio access token for user ${userId}. Cannot create webhook.`
+      )
+      throw new Error(
+        'Attio account connection required. Please connect your Attio account in the trigger configuration and try again.'
+      )
+    }
+
+    const notificationUrl = `${getBaseUrl()}/api/webhooks/trigger/${path}`
+
+    const { TRIGGER_EVENT_MAP } = await import('@/triggers/attio/utils')
+
+    let subscriptions: Array<{ event_type: string; filter: null }> = []
+    if (triggerId === 'attio_webhook') {
+      const allEvents = new Set<string>()
+      for (const events of Object.values(TRIGGER_EVENT_MAP)) {
+        for (const event of events) {
+          allEvents.add(event)
+        }
+      }
+      subscriptions = Array.from(allEvents).map((event_type) => ({ event_type, filter: null }))
+    } else {
+      const events = TRIGGER_EVENT_MAP[triggerId]
+      if (!events || events.length === 0) {
+        attioLogger.warn(`[${requestId}] No event types mapped for trigger ${triggerId}`, {
+          webhookId: webhookData.id,
+        })
+        throw new Error(`Unknown Attio trigger type: ${triggerId}`)
+      }
+      subscriptions = events.map((event_type) => ({ event_type, filter: null }))
+    }
+
+    const requestBody = {
+      data: {
+        target_url: notificationUrl,
+        subscriptions,
+      },
+    }
+
+    const attioResponse = await fetch('https://api.attio.com/v2/webhooks', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    if (!attioResponse.ok) {
+      const errorBody = await attioResponse.json().catch(() => ({}))
+      attioLogger.error(
+        `[${requestId}] Failed to create webhook in Attio for webhook ${webhookData.id}. Status: ${attioResponse.status}`,
+        { response: errorBody }
+      )
+
+      let userFriendlyMessage = 'Failed to create webhook subscription in Attio'
+      if (attioResponse.status === 401) {
+        userFriendlyMessage = 'Attio authentication failed. Please reconnect your Attio account.'
+      } else if (attioResponse.status === 403) {
+        userFriendlyMessage =
+          'Attio access denied. Please ensure your integration has webhook permissions.'
+      }
+
+      throw new Error(userFriendlyMessage)
+    }
+
+    const responseBody = await attioResponse.json()
+    const data = responseBody.data || responseBody
+    const webhookId = data.id?.webhook_id || data.webhook_id || data.id
+    const secret = data.secret
+
+    if (!webhookId) {
+      attioLogger.error(
+        `[${requestId}] Attio webhook created but no webhook_id returned for webhook ${webhookData.id}`,
+        { response: responseBody }
+      )
+      throw new Error('Attio webhook creation succeeded but no webhook ID was returned')
+    }
+
+    if (!secret) {
+      attioLogger.warn(
+        `[${requestId}] Attio webhook created but no secret returned for webhook ${webhookData.id}. Signature verification will be skipped.`,
+        { response: responseBody }
+      )
+    }
+
+    attioLogger.info(
+      `[${requestId}] Successfully created webhook in Attio for webhook ${webhookData.id}.`,
+      {
+        attioWebhookId: webhookId,
+        targetUrl: notificationUrl,
+        subscriptionCount: subscriptions.length,
+        status: data.status,
+      }
+    )
+
+    return { externalId: webhookId, webhookSecret: secret || '' }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    attioLogger.error(
+      `[${requestId}] Exception during Attio webhook creation for webhook ${webhookData.id}.`,
+      { message }
+    )
+    throw error
+  }
+}
+
+export async function deleteAttioWebhook(
+  webhook: any,
+  _workflow: any,
+  requestId: string
+): Promise<void> {
+  try {
+    const config = getProviderConfig(webhook)
+    const externalId = config.externalId as string | undefined
+    const credentialId = config.credentialId as string | undefined
+
+    if (!externalId) {
+      attioLogger.warn(
+        `[${requestId}] Missing externalId for Attio webhook deletion ${webhook.id}, skipping cleanup`
+      )
+      return
+    }
+
+    if (!credentialId) {
+      attioLogger.warn(
+        `[${requestId}] Missing credentialId for Attio webhook deletion ${webhook.id}, skipping cleanup`
+      )
+      return
+    }
+
+    const credentialOwner = await getCredentialOwner(credentialId, requestId)
+    const accessToken = credentialOwner
+      ? await refreshAccessTokenIfNeeded(
+          credentialOwner.accountId,
+          credentialOwner.userId,
+          requestId
+        )
+      : null
+
+    if (!accessToken) {
+      attioLogger.warn(
+        `[${requestId}] Could not retrieve Attio access token. Cannot delete webhook.`,
+        { webhookId: webhook.id }
+      )
+      return
+    }
+
+    const attioResponse = await fetch(`https://api.attio.com/v2/webhooks/${externalId}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+
+    if (!attioResponse.ok && attioResponse.status !== 404) {
+      const responseBody = await attioResponse.json().catch(() => ({}))
+      attioLogger.warn(
+        `[${requestId}] Failed to delete Attio webhook (non-fatal): ${attioResponse.status}`,
+        { response: responseBody }
+      )
+    } else {
+      attioLogger.info(`[${requestId}] Successfully deleted Attio webhook ${externalId}`)
+    }
+  } catch (error) {
+    attioLogger.warn(`[${requestId}] Error deleting Attio webhook (non-fatal)`, error)
   }
 }
 
@@ -1084,6 +1360,116 @@ export async function createGrainWebhookSubscription(
   } catch (error: any) {
     grainLogger.error(
       `[${requestId}] Exception during Grain webhook creation for webhook ${webhookData.id}.`,
+      {
+        message: error.message,
+        stack: error.stack,
+      }
+    )
+    throw error
+  }
+}
+
+export async function createFathomWebhookSubscription(
+  _request: NextRequest,
+  webhookData: any,
+  requestId: string
+): Promise<{ id: string } | undefined> {
+  try {
+    const { path, providerConfig } = webhookData
+    const {
+      apiKey,
+      triggerId,
+      triggeredFor,
+      includeSummary,
+      includeTranscript,
+      includeActionItems,
+      includeCrmMatches,
+    } = providerConfig || {}
+
+    if (!apiKey) {
+      fathomLogger.warn(`[${requestId}] Missing apiKey for Fathom webhook creation.`, {
+        webhookId: webhookData.id,
+      })
+      throw new Error(
+        'Fathom API Key is required. Please provide your API key in the trigger configuration.'
+      )
+    }
+
+    const notificationUrl = `${getBaseUrl()}/api/webhooks/trigger/${path}`
+
+    const triggeredForValue = triggeredFor || 'my_recordings'
+
+    const toBool = (val: unknown, fallback: boolean): boolean => {
+      if (val === undefined) return fallback
+      return val === true || val === 'true'
+    }
+
+    const requestBody: Record<string, any> = {
+      destination_url: notificationUrl,
+      triggered_for: [triggeredForValue],
+      include_summary: toBool(includeSummary, true),
+      include_transcript: toBool(includeTranscript, false),
+      include_action_items: toBool(includeActionItems, false),
+      include_crm_matches: toBool(includeCrmMatches, false),
+    }
+
+    fathomLogger.info(`[${requestId}] Creating Fathom webhook`, {
+      triggerId,
+      triggeredFor: triggeredForValue,
+      webhookId: webhookData.id,
+    })
+
+    const fathomResponse = await fetch('https://api.fathom.ai/external/v1/webhooks', {
+      method: 'POST',
+      headers: {
+        'X-Api-Key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    })
+
+    const responseBody = await fathomResponse.json().catch(() => ({}))
+
+    if (!fathomResponse.ok) {
+      const errorMessage =
+        (responseBody as Record<string, string>).message ||
+        (responseBody as Record<string, string>).error ||
+        'Unknown Fathom API error'
+      fathomLogger.error(
+        `[${requestId}] Failed to create webhook in Fathom for webhook ${webhookData.id}. Status: ${fathomResponse.status}`,
+        { message: errorMessage, response: responseBody }
+      )
+
+      let userFriendlyMessage = 'Failed to create webhook subscription in Fathom'
+      if (fathomResponse.status === 401) {
+        userFriendlyMessage = 'Invalid Fathom API Key. Please verify your key is correct.'
+      } else if (fathomResponse.status === 400) {
+        userFriendlyMessage = `Fathom error: ${errorMessage}`
+      } else if (errorMessage && errorMessage !== 'Unknown Fathom API error') {
+        userFriendlyMessage = `Fathom error: ${errorMessage}`
+      }
+
+      throw new Error(userFriendlyMessage)
+    }
+
+    if (!responseBody.id) {
+      fathomLogger.error(
+        `[${requestId}] Fathom webhook creation returned success but no webhook ID for ${webhookData.id}.`
+      )
+      throw new Error('Fathom webhook created but no ID returned. Please try again.')
+    }
+
+    fathomLogger.info(
+      `[${requestId}] Successfully created webhook in Fathom for webhook ${webhookData.id}.`,
+      {
+        fathomWebhookId: responseBody.id,
+      }
+    )
+
+    return { id: responseBody.id }
+  } catch (error: any) {
+    fathomLogger.error(
+      `[${requestId}] Exception during Fathom webhook creation for webhook ${webhookData.id}.`,
       {
         message: error.message,
         stack: error.stack,
@@ -1229,12 +1615,14 @@ export async function createAirtableWebhookSubscription(
       throw new Error(tableIdValidation.error)
     }
 
-    const credentialOwnerUserId = credentialId
-      ? await getCredentialOwnerUserId(credentialId, requestId)
-      : null
+    const credentialOwner = credentialId ? await getCredentialOwner(credentialId, requestId) : null
     const accessToken = credentialId
-      ? credentialOwnerUserId
-        ? await refreshAccessTokenIfNeeded(credentialId, credentialOwnerUserId, requestId)
+      ? credentialOwner
+        ? await refreshAccessTokenIfNeeded(
+            credentialOwner.accountId,
+            credentialOwner.userId,
+            requestId
+          )
         : null
       : await getOAuthToken(userId, 'airtable')
     if (!accessToken) {
@@ -1480,12 +1868,14 @@ export async function createWebflowWebhookSubscription(
       throw new Error('Trigger type is required to create Webflow webhook')
     }
 
-    const credentialOwnerUserId = credentialId
-      ? await getCredentialOwnerUserId(credentialId, requestId)
-      : null
+    const credentialOwner = credentialId ? await getCredentialOwner(credentialId, requestId) : null
     const accessToken = credentialId
-      ? credentialOwnerUserId
-        ? await refreshAccessTokenIfNeeded(credentialId, credentialOwnerUserId, requestId)
+      ? credentialOwner
+        ? await refreshAccessTokenIfNeeded(
+            credentialOwner.accountId,
+            credentialOwner.userId,
+            requestId
+          )
         : null
       : await getOAuthToken(userId, 'webflow')
     if (!accessToken) {
@@ -1584,7 +1974,9 @@ type RecreateCheckInput = {
 /** Providers that create external webhook subscriptions */
 const PROVIDERS_WITH_EXTERNAL_SUBSCRIPTIONS = new Set([
   'airtable',
+  'attio',
   'calendly',
+  'fathom',
   'webflow',
   'typeform',
   'grain',
@@ -1599,6 +1991,7 @@ const SYSTEM_MANAGED_FIELDS = new Set([
   'externalSubscriptionId',
   'eventTypes',
   'webhookTag',
+  'webhookSecret',
   'historyId',
   'lastCheckedTimestamp',
   'setupCompleted',
@@ -1659,6 +2052,16 @@ export async function createExternalWebhookSubscription(
       updatedProviderConfig = { ...updatedProviderConfig, externalId }
       externalSubscriptionCreated = true
     }
+  } else if (provider === 'attio') {
+    const result = await createAttioWebhookSubscription(userId, webhookData, requestId)
+    if (result) {
+      updatedProviderConfig = {
+        ...updatedProviderConfig,
+        externalId: result.externalId,
+        webhookSecret: result.webhookSecret,
+      }
+      externalSubscriptionCreated = true
+    }
   } else if (provider === 'calendly') {
     const externalId = await createCalendlyWebhookSubscription(webhookData, requestId)
     if (externalId) {
@@ -1686,6 +2089,12 @@ export async function createExternalWebhookSubscription(
       updatedProviderConfig = { ...updatedProviderConfig, webhookTag: usedTag }
     }
     externalSubscriptionCreated = true
+  } else if (provider === 'fathom') {
+    const result = await createFathomWebhookSubscription(request, webhookData, requestId)
+    if (result) {
+      updatedProviderConfig = { ...updatedProviderConfig, externalId: result.id }
+      externalSubscriptionCreated = true
+    }
   } else if (provider === 'grain') {
     const result = await createGrainWebhookSubscription(request, webhookData, requestId)
     if (result) {
@@ -1709,7 +2118,7 @@ export async function createExternalWebhookSubscription(
 
 /**
  * Clean up external webhook subscriptions for a webhook
- * Handles Airtable, Teams, Telegram, Typeform, Calendly, Grain, and Lemlist cleanup
+ * Handles Airtable, Attio, Teams, Telegram, Typeform, Calendly, Grain, and Lemlist cleanup
  * Don't fail deletion if cleanup fails
  */
 export async function cleanupExternalWebhook(
@@ -1719,6 +2128,8 @@ export async function cleanupExternalWebhook(
 ): Promise<void> {
   if (webhook.provider === 'airtable') {
     await deleteAirtableWebhook(webhook, workflow, requestId)
+  } else if (webhook.provider === 'attio') {
+    await deleteAttioWebhook(webhook, workflow, requestId)
   } else if (webhook.provider === 'microsoft-teams') {
     await deleteTeamsSubscription(webhook, workflow, requestId)
   } else if (webhook.provider === 'telegram') {
@@ -1729,6 +2140,8 @@ export async function cleanupExternalWebhook(
     await deleteCalendlyWebhook(webhook, requestId)
   } else if (webhook.provider === 'webflow') {
     await deleteWebflowWebhook(webhook, workflow, requestId)
+  } else if (webhook.provider === 'fathom') {
+    await deleteFathomWebhook(webhook, requestId)
   } else if (webhook.provider === 'grain') {
     await deleteGrainWebhook(webhook, requestId)
   } else if (webhook.provider === 'lemlist') {

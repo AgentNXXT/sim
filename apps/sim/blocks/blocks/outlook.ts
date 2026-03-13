@@ -1,4 +1,5 @@
 import { OutlookIcon } from '@/components/icons'
+import { getScopesForService } from '@/lib/oauth/utils'
 import type { BlockConfig } from '@/blocks/types'
 import { AuthMode } from '@/blocks/types'
 import { normalizeFileInput } from '@/blocks/utils'
@@ -39,18 +40,20 @@ export const OutlookBlock: BlockConfig<OutlookResponse> = {
       id: 'credential',
       title: 'Microsoft Account',
       type: 'oauth-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'basic',
       serviceId: 'outlook',
-      requiredScopes: [
-        'Mail.ReadWrite',
-        'Mail.ReadBasic',
-        'Mail.Read',
-        'Mail.Send',
-        'offline_access',
-        'openid',
-        'profile',
-        'email',
-      ],
+      requiredScopes: getScopesForService('outlook'),
       placeholder: 'Select Microsoft account',
+      required: true,
+    },
+    {
+      id: 'manualCredential',
+      title: 'Microsoft Account',
+      type: 'short-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'advanced',
+      placeholder: 'Enter credential ID',
       required: true,
     },
     {
@@ -176,7 +179,8 @@ export const OutlookBlock: BlockConfig<OutlookResponse> = {
       type: 'folder-selector',
       canonicalParamId: 'folder',
       serviceId: 'outlook',
-      requiredScopes: ['Mail.ReadWrite', 'Mail.ReadBasic', 'Mail.Read'],
+      selectorKey: 'outlook.folders',
+      requiredScopes: getScopesForService('outlook'),
       placeholder: 'Select Outlook folder',
       dependsOn: ['credential'],
       mode: 'basic',
@@ -221,7 +225,8 @@ export const OutlookBlock: BlockConfig<OutlookResponse> = {
       type: 'folder-selector',
       canonicalParamId: 'destinationId',
       serviceId: 'outlook',
-      requiredScopes: ['Mail.ReadWrite', 'Mail.ReadBasic', 'Mail.Read'],
+      selectorKey: 'outlook.folders',
+      requiredScopes: getScopesForService('outlook'),
       placeholder: 'Select destination folder',
       dependsOn: ['credential'],
       mode: 'basic',
@@ -267,7 +272,8 @@ export const OutlookBlock: BlockConfig<OutlookResponse> = {
       type: 'folder-selector',
       canonicalParamId: 'copyDestinationId',
       serviceId: 'outlook',
-      requiredScopes: ['Mail.ReadWrite', 'Mail.ReadBasic', 'Mail.Read'],
+      selectorKey: 'outlook.folders',
+      requiredScopes: getScopesForService('outlook'),
       placeholder: 'Select destination folder',
       dependsOn: ['credential'],
       mode: 'basic',
@@ -326,7 +332,7 @@ export const OutlookBlock: BlockConfig<OutlookResponse> = {
       },
       params: (params) => {
         const {
-          credential,
+          oauthCredential,
           folder,
           destinationId,
           copyDestinationId,
@@ -385,14 +391,14 @@ export const OutlookBlock: BlockConfig<OutlookResponse> = {
 
         return {
           ...rest,
-          credential,
+          oauthCredential,
         }
       },
     },
   },
   inputs: {
     operation: { type: 'string', description: 'Operation to perform' },
-    credential: { type: 'string', description: 'Outlook access token' },
+    oauthCredential: { type: 'string', description: 'Outlook access token' },
     // Send operation inputs
     to: { type: 'string', description: 'Recipient email address' },
     subject: { type: 'string', description: 'Email subject' },

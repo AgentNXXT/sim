@@ -1,4 +1,5 @@
 import { GoogleFormsIcon } from '@/components/icons'
+import { getScopesForService } from '@/lib/oauth/utils'
 import type { BlockConfig } from '@/blocks/types'
 import { getTrigger } from '@/triggers'
 
@@ -34,16 +35,21 @@ export const GoogleFormsBlock: BlockConfig = {
       id: 'credential',
       title: 'Google Account',
       type: 'oauth-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'basic',
       required: true,
       serviceId: 'google-forms',
-      requiredScopes: [
-        'https://www.googleapis.com/auth/userinfo.email',
-        'https://www.googleapis.com/auth/userinfo.profile',
-        'https://www.googleapis.com/auth/drive',
-        'https://www.googleapis.com/auth/forms.body',
-        'https://www.googleapis.com/auth/forms.responses.readonly',
-      ],
+      requiredScopes: getScopesForService('google-forms'),
       placeholder: 'Select Google account',
+    },
+    {
+      id: 'manualCredential',
+      title: 'Google Account',
+      type: 'short-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'advanced',
+      placeholder: 'Enter credential ID',
+      required: true,
     },
     // Form selector (basic mode)
     {
@@ -53,6 +59,7 @@ export const GoogleFormsBlock: BlockConfig = {
       canonicalParamId: 'formId',
       required: true,
       serviceId: 'google-forms',
+      selectorKey: 'google.drive',
       requiredScopes: [],
       mimeType: 'application/vnd.google-apps.form',
       placeholder: 'Select a form',
@@ -233,7 +240,7 @@ Example for "Add a required multiple choice question about favorite color":
       },
       params: (params) => {
         const {
-          credential,
+          oauthCredential,
           operation,
           formId, // Canonical param from formSelector (basic) or manualFormId (advanced)
           responseId,
@@ -251,7 +258,7 @@ Example for "Add a required multiple choice question about favorite color":
           ...rest
         } = params
 
-        const baseParams = { ...rest, credential }
+        const baseParams = { ...rest, oauthCredential }
         const effectiveFormId = formId ? String(formId).trim() : undefined
 
         switch (operation) {
@@ -309,7 +316,7 @@ Example for "Add a required multiple choice question about favorite color":
   },
   inputs: {
     operation: { type: 'string', description: 'Operation to perform' },
-    credential: { type: 'string', description: 'Google OAuth credential' },
+    oauthCredential: { type: 'string', description: 'Google OAuth credential' },
     formId: { type: 'string', description: 'Google Form ID' },
     responseId: { type: 'string', description: 'Specific response ID' },
     pageSize: { type: 'string', description: 'Max responses to retrieve' },

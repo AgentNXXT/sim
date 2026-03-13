@@ -12,6 +12,7 @@ import {
   filterValidEdges,
   getUniqueBlockName,
   mergeSubblockState,
+  remapConditionIds,
 } from '@/stores/workflows/utils'
 import type {
   Position,
@@ -20,8 +21,10 @@ import type {
   WorkflowStore,
 } from '@/stores/workflows/workflow/types'
 import {
+  findAllDescendantNodes,
   generateLoopBlocks,
   generateParallelBlocks,
+  isBlockProtected,
   wouldCreateCycle,
 } from '@/stores/workflows/workflow/utils'
 
@@ -374,21 +377,21 @@ export const useWorkflowStore = create<WorkflowStore>()(
         const blocksToToggle = new Set<string>()
 
         // For each ID, collect blocks to toggle (skip locked blocks entirely)
-        // If it's a container, also include non-locked children
+        // If it's a container, also include non-locked descendants
         for (const id of ids) {
           const block = currentBlocks[id]
           if (!block) continue
 
-          // Skip locked blocks entirely (including their children)
-          if (block.locked) continue
+          // Skip protected blocks entirely (locked or inside a locked ancestor)
+          if (isBlockProtected(id, currentBlocks)) continue
 
           blocksToToggle.add(id)
 
-          // If it's a loop or parallel, also include non-locked children
+          // If it's a loop or parallel, also include non-locked descendants
           if (block.type === 'loop' || block.type === 'parallel') {
-            Object.entries(currentBlocks).forEach(([blockId, b]) => {
-              if (b.data?.parentId === id && !b.locked) {
-                blocksToToggle.add(blockId)
+            findAllDescendantNodes(id, currentBlocks).forEach((descId) => {
+              if (!isBlockProtected(descId, currentBlocks)) {
+                blocksToToggle.add(descId)
               }
             })
           }
@@ -415,18 +418,8 @@ export const useWorkflowStore = create<WorkflowStore>()(
         const currentBlocks = get().blocks
         const newBlocks = { ...currentBlocks }
 
-        // Helper to check if a block is protected (locked or inside locked parent)
-        const isProtected = (blockId: string): boolean => {
-          const block = currentBlocks[blockId]
-          if (!block) return false
-          if (block.locked) return true
-          const parentId = block.data?.parentId
-          if (parentId && currentBlocks[parentId]?.locked) return true
-          return false
-        }
-
         for (const id of ids) {
-          if (!newBlocks[id] || isProtected(id)) continue
+          if (!newBlocks[id] || isBlockProtected(id, currentBlocks)) continue
           newBlocks[id] = {
             ...newBlocks[id],
             horizontalHandles: !newBlocks[id].horizontalHandles,
@@ -619,6 +612,21 @@ export const useWorkflowStore = create<WorkflowStore>()(
           {}
         )
 
+        // Remap condition/router IDs in the duplicated subBlocks
+        const clonedSubBlockValues = activeWorkflowId
+          ? JSON.parse(
+              JSON.stringify(
+                useSubBlockStore.getState().workflowValues[activeWorkflowId]?.[id] || {}
+              )
+            )
+          : {}
+        remapConditionIds(
+          newSubBlocks as Record<string, SubBlockState>,
+          clonedSubBlockValues,
+          id,
+          newId
+        )
+
         const newState = {
           blocks: {
             ...get().blocks,
@@ -638,14 +646,12 @@ export const useWorkflowStore = create<WorkflowStore>()(
         }
 
         if (activeWorkflowId) {
-          const subBlockValues =
-            useSubBlockStore.getState().workflowValues[activeWorkflowId]?.[id] || {}
           useSubBlockStore.setState((state) => ({
             workflowValues: {
               ...state.workflowValues,
               [activeWorkflowId]: {
                 ...state.workflowValues[activeWorkflowId],
-                [newId]: JSON.parse(JSON.stringify(subBlockValues)),
+                [newId]: clonedSubBlockValues,
               },
             },
           }))
@@ -1267,19 +1273,17 @@ export const useWorkflowStore = create<WorkflowStore>()(
         const blocksToToggle = new Set<string>()
 
         // For each ID, collect blocks to toggle
-        // If it's a container, also include all children
+        // If it's a container, also include all descendants
         for (const id of ids) {
           const block = currentBlocks[id]
           if (!block) continue
 
           blocksToToggle.add(id)
 
-          // If it's a loop or parallel, also include all children
+          // If it's a loop or parallel, also include all descendants
           if (block.type === 'loop' || block.type === 'parallel') {
-            Object.entries(currentBlocks).forEach(([blockId, b]) => {
-              if (b.data?.parentId === id) {
-                blocksToToggle.add(blockId)
-              }
+            findAllDescendantNodes(id, currentBlocks).forEach((descId) => {
+              blocksToToggle.add(descId)
             })
           }
         }

@@ -37,6 +37,7 @@ export const ollamaProvider: ProviderConfig = {
     try {
       const response = await fetch(`${OLLAMA_HOST}/api/tags`)
       if (!response.ok) {
+        await response.text().catch(() => {})
         useProvidersStore.getState().setProviderModels('ollama', [])
         logger.warn('Ollama service is not available. The provider will be disabled.')
         return
@@ -166,7 +167,10 @@ export const ollamaProvider: ProviderConfig = {
           stream: true,
           stream_options: { include_usage: true },
         }
-        const streamResponse = await ollama.chat.completions.create(streamingParams)
+        const streamResponse = await ollama.chat.completions.create(
+          streamingParams,
+          request.abortSignal ? { signal: request.abortSignal } : undefined
+        )
 
         const streamingResult = {
           stream: createReadableStreamFromOllamaStream(streamResponse, (content, usage) => {
@@ -248,7 +252,10 @@ export const ollamaProvider: ProviderConfig = {
 
       const initialCallTime = Date.now()
 
-      let currentResponse = await ollama.chat.completions.create(payload)
+      let currentResponse = await ollama.chat.completions.create(
+        payload,
+        request.abortSignal ? { signal: request.abortSignal } : undefined
+      )
       const firstResponseTime = Date.now() - initialCallTime
 
       let content = currentResponse.choices[0]?.message?.content || ''
@@ -408,7 +415,10 @@ export const ollamaProvider: ProviderConfig = {
 
         const nextModelStartTime = Date.now()
 
-        currentResponse = await ollama.chat.completions.create(nextPayload)
+        currentResponse = await ollama.chat.completions.create(
+          nextPayload,
+          request.abortSignal ? { signal: request.abortSignal } : undefined
+        )
 
         const nextModelEndTime = Date.now()
         const thisModelTime = nextModelEndTime - nextModelStartTime
@@ -450,7 +460,10 @@ export const ollamaProvider: ProviderConfig = {
           stream: true,
           stream_options: { include_usage: true },
         }
-        const streamResponse = await ollama.chat.completions.create(streamingParams)
+        const streamResponse = await ollama.chat.completions.create(
+          streamingParams,
+          request.abortSignal ? { signal: request.abortSignal } : undefined
+        )
 
         const streamingResult = {
           stream: createReadableStreamFromOllamaStream(streamResponse, (content, usage) => {

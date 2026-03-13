@@ -1,4 +1,5 @@
 import { DropboxIcon } from '@/components/icons'
+import { getScopesForService } from '@/lib/oauth/utils'
 import type { BlockConfig } from '@/blocks/types'
 import { AuthMode } from '@/blocks/types'
 import { normalizeFileInput } from '@/blocks/utils'
@@ -38,17 +39,20 @@ export const DropboxBlock: BlockConfig<DropboxResponse> = {
       id: 'credential',
       title: 'Dropbox Account',
       type: 'oauth-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'basic',
       serviceId: 'dropbox',
-      requiredScopes: [
-        'account_info.read',
-        'files.metadata.read',
-        'files.metadata.write',
-        'files.content.read',
-        'files.content.write',
-        'sharing.read',
-        'sharing.write',
-      ],
+      requiredScopes: getScopesForService('dropbox'),
       placeholder: 'Select Dropbox account',
+      required: true,
+    },
+    {
+      id: 'manualCredential',
+      title: 'Dropbox Account',
+      type: 'short-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'advanced',
+      placeholder: 'Enter credential ID',
       required: true,
     },
     // Upload operation inputs
@@ -348,7 +352,7 @@ Return ONLY the timestamp string - no explanations, no quotes, no extra text.`,
   },
   inputs: {
     operation: { type: 'string', description: 'Operation to perform' },
-    credential: { type: 'string', description: 'Dropbox OAuth credential' },
+    oauthCredential: { type: 'string', description: 'Dropbox OAuth credential' },
     // Common inputs
     path: { type: 'string', description: 'Path in Dropbox' },
     autorename: { type: 'boolean', description: 'Auto-rename on conflict' },

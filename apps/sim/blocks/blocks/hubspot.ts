@@ -1,4 +1,5 @@
 import { HubspotIcon } from '@/components/icons'
+import { getScopesForService } from '@/lib/oauth/utils'
 import type { BlockConfig } from '@/blocks/types'
 import { AuthMode } from '@/blocks/types'
 import type { HubSpotResponse } from '@/tools/hubspot/types'
@@ -39,33 +40,20 @@ export const HubSpotBlock: BlockConfig<HubSpotResponse> = {
       id: 'credential',
       title: 'HubSpot Account',
       type: 'oauth-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'basic',
       serviceId: 'hubspot',
-      requiredScopes: [
-        'crm.objects.contacts.read',
-        'crm.objects.contacts.write',
-        'crm.objects.companies.read',
-        'crm.objects.companies.write',
-        'crm.objects.deals.read',
-        'crm.objects.deals.write',
-        'crm.objects.owners.read',
-        'crm.objects.users.read',
-        'crm.objects.users.write',
-        'crm.objects.marketing_events.read',
-        'crm.objects.marketing_events.write',
-        'crm.objects.line_items.read',
-        'crm.objects.line_items.write',
-        'crm.objects.quotes.read',
-        'crm.objects.quotes.write',
-        'crm.objects.appointments.read',
-        'crm.objects.appointments.write',
-        'crm.objects.carts.read',
-        'crm.objects.carts.write',
-        'crm.import',
-        'crm.lists.read',
-        'crm.lists.write',
-        'tickets',
-      ],
+      requiredScopes: getScopesForService('hubspot'),
       placeholder: 'Select HubSpot account',
+      required: true,
+    },
+    {
+      id: 'manualCredential',
+      title: 'HubSpot Account',
+      type: 'short-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'advanced',
+      placeholder: 'Enter credential ID',
       required: true,
     },
     {
@@ -823,7 +811,7 @@ Return ONLY the JSON array of property names - no explanations, no markdown, no 
       },
       params: (params) => {
         const {
-          credential,
+          oauthCredential,
           operation,
           propertiesToSet,
           properties,
@@ -835,7 +823,7 @@ Return ONLY the JSON array of property names - no explanations, no markdown, no 
         } = params
 
         const cleanParams: Record<string, any> = {
-          credential,
+          oauthCredential,
         }
 
         const createUpdateOps = [
@@ -890,7 +878,7 @@ Return ONLY the JSON array of property names - no explanations, no markdown, no 
   },
   inputs: {
     operation: { type: 'string', description: 'Operation to perform' },
-    credential: { type: 'string', description: 'HubSpot access token' },
+    oauthCredential: { type: 'string', description: 'HubSpot access token' },
     contactId: { type: 'string', description: 'Contact ID or email' },
     companyId: { type: 'string', description: 'Company ID or domain' },
     idProperty: { type: 'string', description: 'Property name to use as unique identifier' },

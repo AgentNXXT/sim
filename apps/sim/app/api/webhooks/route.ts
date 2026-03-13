@@ -112,7 +112,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ webhooks: [] }, { status: 200 })
     }
 
-    logger.debug(`[${requestId}] Fetching workspace-accessible webhooks for ${session.user.id}`)
     const workspacePermissionRows = await db
       .select({ workspaceId: permissions.entityId })
       .from(permissions)
@@ -368,9 +367,7 @@ export async function POST(request: NextRequest) {
             )
           }
 
-          // Configure each new webhook (for providers that need configuration)
-          const pollingProviders = ['gmail', 'outlook']
-          const needsConfiguration = pollingProviders.includes(provider)
+          const needsConfiguration = provider === 'gmail' || provider === 'outlook'
 
           if (needsConfiguration) {
             const configureFunc =

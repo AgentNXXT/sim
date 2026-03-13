@@ -1,4 +1,5 @@
 import { PipedriveIcon } from '@/components/icons'
+import { getScopesForService } from '@/lib/oauth/utils'
 import type { BlockConfig } from '@/blocks/types'
 import { AuthMode } from '@/blocks/types'
 import type { PipedriveResponse } from '@/tools/pipedrive/types'
@@ -45,17 +46,20 @@ export const PipedriveBlock: BlockConfig<PipedriveResponse> = {
       id: 'credential',
       title: 'Pipedrive Account',
       type: 'oauth-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'basic',
       serviceId: 'pipedrive',
-      requiredScopes: [
-        'base',
-        'deals:full',
-        'contacts:full',
-        'leads:full',
-        'activities:full',
-        'mail:full',
-        'projects:full',
-      ],
+      requiredScopes: getScopesForService('pipedrive'),
       placeholder: 'Select Pipedrive account',
+      required: true,
+    },
+    {
+      id: 'manualCredential',
+      title: 'Pipedrive Account',
+      type: 'short-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'advanced',
+      placeholder: 'Enter credential ID',
       required: true,
     },
     {
@@ -86,11 +90,34 @@ export const PipedriveBlock: BlockConfig<PipedriveResponse> = {
       condition: { field: 'operation', value: ['get_all_deals'] },
     },
     {
+      id: 'pipelineSelector',
+      title: 'Pipeline',
+      type: 'project-selector',
+      canonicalParamId: 'pipeline_id',
+      serviceId: 'pipedrive',
+      selectorKey: 'pipedrive.pipelines',
+      selectorAllowSearch: false,
+      placeholder: 'Select pipeline',
+      dependsOn: ['credential'],
+      mode: 'basic',
+      condition: {
+        field: 'operation',
+        value: ['get_all_deals', 'create_deal', 'get_pipeline_deals'],
+      },
+      required: { field: 'operation', value: 'get_pipeline_deals' },
+    },
+    {
       id: 'pipeline_id',
       title: 'Pipeline ID',
       type: 'short-input',
-      placeholder: 'Filter by pipeline ID ',
-      condition: { field: 'operation', value: ['get_all_deals'] },
+      canonicalParamId: 'pipeline_id',
+      placeholder: 'Enter pipeline ID',
+      mode: 'advanced',
+      condition: {
+        field: 'operation',
+        value: ['get_all_deals', 'create_deal', 'get_pipeline_deals'],
+      },
+      required: { field: 'operation', value: 'get_pipeline_deals' },
     },
     {
       id: 'updated_since',
@@ -161,13 +188,6 @@ Return ONLY the timestamp string - no explanations, no quotes, no extra text.`,
       title: 'Organization ID',
       type: 'short-input',
       placeholder: 'Associated organization ID ',
-      condition: { field: 'operation', value: ['create_deal'] },
-    },
-    {
-      id: 'pipeline_id',
-      title: 'Pipeline ID',
-      type: 'short-input',
-      placeholder: 'Pipeline ID ',
       condition: { field: 'operation', value: ['create_deal'] },
     },
     {
@@ -317,14 +337,6 @@ Return ONLY the date string in YYYY-MM-DD format - no explanations, no quotes, n
           'get_pipelines',
         ],
       },
-    },
-    {
-      id: 'pipeline_id',
-      title: 'Pipeline ID',
-      type: 'short-input',
-      placeholder: 'Enter pipeline ID',
-      required: true,
-      condition: { field: 'operation', value: ['get_pipeline_deals'] },
     },
     {
       id: 'stage_id',
@@ -750,10 +762,10 @@ Return ONLY the date string in YYYY-MM-DD format - no explanations, no quotes, n
         }
       },
       params: (params) => {
-        const { credential, operation, ...rest } = params
+        const { oauthCredential, operation, ...rest } = params
 
         const cleanParams: Record<string, any> = {
-          credential,
+          oauthCredential,
         }
 
         Object.entries(rest).forEach(([key, value]) => {
@@ -768,7 +780,7 @@ Return ONLY the date string in YYYY-MM-DD format - no explanations, no quotes, n
   },
   inputs: {
     operation: { type: 'string', description: 'Operation to perform' },
-    credential: { type: 'string', description: 'Pipedrive access token' },
+    oauthCredential: { type: 'string', description: 'Pipedrive access token' },
     deal_id: { type: 'string', description: 'Deal ID' },
     title: { type: 'string', description: 'Title' },
     value: { type: 'string', description: 'Monetary value' },

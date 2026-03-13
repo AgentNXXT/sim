@@ -2,18 +2,22 @@ import { createLogger } from '@sim/logger'
 import {
   AirtableIcon,
   AsanaIcon,
+  AttioIcon,
   CalComIcon,
   ConfluenceIcon,
   DropboxIcon,
-  GithubIcon,
   GmailIcon,
+  GoogleBigQueryIcon,
   GoogleCalendarIcon,
+  GoogleContactsIcon,
   GoogleDocsIcon,
   GoogleDriveIcon,
   GoogleFormsIcon,
   GoogleGroupsIcon,
   GoogleIcon,
+  GoogleMeetIcon,
   GoogleSheetsIcon,
+  GoogleTasksIcon,
   HubspotIcon,
   JiraIcon,
   LinearIcon,
@@ -58,6 +62,8 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
         icon: GmailIcon,
         baseProviderIcon: GoogleIcon,
         scopes: [
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
           'https://www.googleapis.com/auth/gmail.send',
           'https://www.googleapis.com/auth/gmail.modify',
           'https://www.googleapis.com/auth/gmail.labels',
@@ -70,6 +76,8 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
         icon: GoogleDriveIcon,
         baseProviderIcon: GoogleIcon,
         scopes: [
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
           'https://www.googleapis.com/auth/drive.file',
           'https://www.googleapis.com/auth/drive',
         ],
@@ -81,6 +89,8 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
         icon: GoogleDocsIcon,
         baseProviderIcon: GoogleIcon,
         scopes: [
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
           'https://www.googleapis.com/auth/drive.file',
           'https://www.googleapis.com/auth/drive',
         ],
@@ -92,6 +102,8 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
         icon: GoogleSheetsIcon,
         baseProviderIcon: GoogleIcon,
         scopes: [
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
           'https://www.googleapis.com/auth/drive.file',
           'https://www.googleapis.com/auth/drive',
         ],
@@ -116,7 +128,47 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
         providerId: 'google-calendar',
         icon: GoogleCalendarIcon,
         baseProviderIcon: GoogleIcon,
-        scopes: ['https://www.googleapis.com/auth/calendar'],
+        scopes: [
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
+          'https://www.googleapis.com/auth/calendar',
+        ],
+      },
+      'google-contacts': {
+        name: 'Google Contacts',
+        description: 'Create, read, update, and search contacts with Google Contacts.',
+        providerId: 'google-contacts',
+        icon: GoogleContactsIcon,
+        baseProviderIcon: GoogleIcon,
+        scopes: [
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
+          'https://www.googleapis.com/auth/contacts',
+        ],
+      },
+      'google-bigquery': {
+        name: 'Google BigQuery',
+        description: 'Query, list, and insert data in Google BigQuery.',
+        providerId: 'google-bigquery',
+        icon: GoogleBigQueryIcon,
+        baseProviderIcon: GoogleIcon,
+        scopes: [
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
+          'https://www.googleapis.com/auth/bigquery',
+        ],
+      },
+      'google-tasks': {
+        name: 'Google Tasks',
+        description: 'Create, manage, and organize tasks with Google Tasks.',
+        providerId: 'google-tasks',
+        icon: GoogleTasksIcon,
+        baseProviderIcon: GoogleIcon,
+        scopes: [
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
+          'https://www.googleapis.com/auth/tasks',
+        ],
       },
       'google-vault': {
         name: 'Google Vault',
@@ -125,6 +177,8 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
         icon: GoogleIcon,
         baseProviderIcon: GoogleIcon,
         scopes: [
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
           'https://www.googleapis.com/auth/ediscovery',
           'https://www.googleapis.com/auth/devstorage.read_only',
         ],
@@ -136,8 +190,23 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
         icon: GoogleGroupsIcon,
         baseProviderIcon: GoogleIcon,
         scopes: [
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
           'https://www.googleapis.com/auth/admin.directory.group',
           'https://www.googleapis.com/auth/admin.directory.group.member',
+        ],
+      },
+      'google-meet': {
+        name: 'Google Meet',
+        description: 'Create and manage Google Meet meeting spaces and conferences.',
+        providerId: 'google-meet',
+        icon: GoogleMeetIcon,
+        baseProviderIcon: GoogleIcon,
+        scopes: [
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
+          'https://www.googleapis.com/auth/meetings.space.created',
+          'https://www.googleapis.com/auth/meetings.space.readonly',
         ],
       },
       'vertex-ai': {
@@ -146,7 +215,11 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
         providerId: 'vertex-ai',
         icon: VertexIcon,
         baseProviderIcon: VertexIcon,
-        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        scopes: [
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile',
+          'https://www.googleapis.com/auth/cloud-platform',
+        ],
       },
     },
     defaultService: 'gmail',
@@ -266,21 +339,6 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
     },
     defaultService: 'outlook',
   },
-  github: {
-    name: 'GitHub',
-    icon: GithubIcon,
-    services: {
-      github: {
-        name: 'GitHub',
-        description: 'Manage repositories, issues, and pull requests.',
-        providerId: 'github-repo',
-        icon: GithubIcon,
-        baseProviderIcon: GithubIcon,
-        scopes: ['repo', 'user:email', 'read:user', 'workflow'],
-      },
-    },
-    defaultService: 'github',
-  },
   x: {
     name: 'X',
     icon: xIcon,
@@ -291,7 +349,23 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
         providerId: 'x',
         icon: xIcon,
         baseProviderIcon: xIcon,
-        scopes: ['tweet.read', 'tweet.write', 'users.read', 'offline.access'],
+        scopes: [
+          'tweet.read',
+          'tweet.write',
+          'tweet.moderate.write',
+          'users.read',
+          'follows.read',
+          'follows.write',
+          'bookmark.read',
+          'bookmark.write',
+          'like.read',
+          'like.write',
+          'block.read',
+          'block.write',
+          'mute.read',
+          'mute.write',
+          'offline.access',
+        ],
       },
     },
     defaultService: 'x',
@@ -329,6 +403,21 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
           'search:confluence',
           'read:me',
           'offline_access',
+          'read:blogpost:confluence',
+          'write:blogpost:confluence',
+          'delete:blogpost:confluence',
+          'read:content.property:confluence',
+          'write:content.property:confluence',
+          'read:hierarchical-content:confluence',
+          'read:content.metadata:confluence',
+          'read:user:confluence',
+          'read:task:confluence',
+          'write:task:confluence',
+          'write:space:confluence',
+          'delete:space:confluence',
+          'read:space.property:confluence',
+          'write:space.property:confluence',
+          'read:space.permission:confluence',
         ],
       },
     },
@@ -369,6 +458,7 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
           'read:comment:jira',
           'delete:comment:jira',
           'read:attachment:jira',
+          'write:attachment:jira',
           'delete:attachment:jira',
           'write:issue-worklog:jira',
           'read:issue-worklog:jira',
@@ -427,7 +517,13 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
         providerId: 'airtable',
         icon: AirtableIcon,
         baseProviderIcon: AirtableIcon,
-        scopes: ['data.records:read', 'data.records:write', 'user.email:read', 'webhook:manage'],
+        scopes: [
+          'data.records:read',
+          'data.records:write',
+          'schema.bases:read',
+          'user.email:read',
+          'webhook:manage',
+        ],
       },
     },
     defaultService: 'airtable',
@@ -528,6 +624,7 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
           'im:history',
           'im:read',
           'users:read',
+          // TODO: Add 'users:read.email' once Slack app review is approved
           'files:write',
           'files:read',
           'canvases:write',
@@ -594,7 +691,7 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
         providerId: 'webflow',
         icon: WebflowIcon,
         baseProviderIcon: WebflowIcon,
-        scopes: ['cms:read', 'cms:write', 'sites:read', 'sites:write'],
+        scopes: ['cms:read', 'cms:write', 'sites:read', 'sites:write', 'forms:read'],
       },
     },
     defaultService: 'webflow',
@@ -628,6 +725,31 @@ export const OAUTH_PROVIDERS: Record<string, OAuthProviderConfig> = {
       },
     },
     defaultService: 'asana',
+  },
+  attio: {
+    name: 'Attio',
+    icon: AttioIcon,
+    services: {
+      attio: {
+        name: 'Attio',
+        description: 'Manage records, notes, tasks, lists, comments, and more in Attio CRM.',
+        providerId: 'attio',
+        icon: AttioIcon,
+        baseProviderIcon: AttioIcon,
+        scopes: [
+          'record_permission:read-write',
+          'object_configuration:read-write',
+          'list_configuration:read-write',
+          'list_entry:read-write',
+          'note:read-write',
+          'task:read-write',
+          'comment:read-write',
+          'user_management:read',
+          'webhook:read-write',
+        ],
+      },
+    },
+    defaultService: 'attio',
   },
   calcom: {
     name: 'Cal.com',
@@ -851,19 +973,6 @@ function getProviderAuthConfig(provider: string): ProviderAuthConfig {
         useBasicAuth: false,
       }
     }
-    case 'github': {
-      const { clientId, clientSecret } = getCredentials(
-        env.GITHUB_CLIENT_ID,
-        env.GITHUB_CLIENT_SECRET
-      )
-      return {
-        tokenEndpoint: 'https://github.com/login/oauth/access_token',
-        clientId,
-        clientSecret,
-        useBasicAuth: false,
-        additionalHeaders: { Accept: 'application/json' },
-      }
-    }
     case 'x': {
       const { clientId, clientSecret } = getCredentials(env.X_CLIENT_ID, env.X_CLIENT_SECRET)
       return {
@@ -964,6 +1073,18 @@ function getProviderAuthConfig(provider: string): ProviderAuthConfig {
         clientSecret,
         useBasicAuth: true,
         supportsRefreshTokenRotation: true,
+      }
+    }
+    case 'attio': {
+      const { clientId, clientSecret } = getCredentials(
+        env.ATTIO_CLIENT_ID,
+        env.ATTIO_CLIENT_SECRET
+      )
+      return {
+        tokenEndpoint: 'https://app.attio.com/oauth/token',
+        clientId,
+        clientSecret,
+        useBasicAuth: false,
       }
     }
     case 'dropbox': {

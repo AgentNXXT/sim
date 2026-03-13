@@ -1,4 +1,5 @@
 import { GoogleSlidesIcon } from '@/components/icons'
+import { getScopesForService } from '@/lib/oauth/utils'
 import { resolveHttpsUrlFromFileInput } from '@/lib/uploads/utils/file-utils'
 import type { BlockConfig } from '@/blocks/types'
 import { AuthMode } from '@/blocks/types'
@@ -46,13 +47,21 @@ export const GoogleSlidesBlock: BlockConfig<GoogleSlidesResponse> = {
       id: 'credential',
       title: 'Google Account',
       type: 'oauth-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'basic',
       required: true,
       serviceId: 'google-drive',
-      requiredScopes: [
-        'https://www.googleapis.com/auth/drive.file',
-        'https://www.googleapis.com/auth/drive',
-      ],
+      requiredScopes: getScopesForService('google-drive'),
       placeholder: 'Select Google account',
+    },
+    {
+      id: 'manualCredential',
+      title: 'Google Account',
+      type: 'short-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'advanced',
+      placeholder: 'Enter credential ID',
+      required: true,
     },
     // Presentation selector (basic mode) - for operations that need an existing presentation
     {
@@ -61,6 +70,7 @@ export const GoogleSlidesBlock: BlockConfig<GoogleSlidesResponse> = {
       type: 'file-selector',
       canonicalParamId: 'presentationId',
       serviceId: 'google-drive',
+      selectorKey: 'google.drive',
       requiredScopes: [],
       mimeType: 'application/vnd.google-apps.presentation',
       placeholder: 'Select a presentation',
@@ -174,6 +184,7 @@ Return ONLY the title - no explanations, no quotes, no extra text.`,
       type: 'file-selector',
       canonicalParamId: 'folderId',
       serviceId: 'google-drive',
+      selectorKey: 'google.drive',
       requiredScopes: [],
       mimeType: 'application/vnd.google-apps.folder',
       placeholder: 'Select a parent folder',
@@ -662,7 +673,7 @@ Return ONLY the text content - no explanations, no markdown formatting markers, 
       },
       params: (params) => {
         const {
-          credential,
+          oauthCredential,
           presentationId,
           folderId,
           slideIndex,
@@ -679,7 +690,7 @@ Return ONLY the text content - no explanations, no markdown formatting markers, 
         const result: Record<string, any> = {
           ...rest,
           presentationId: effectivePresentationId || undefined,
-          credential,
+          oauthCredential,
         }
 
         // Handle operation-specific params
@@ -799,7 +810,7 @@ Return ONLY the text content - no explanations, no markdown formatting markers, 
   },
   inputs: {
     operation: { type: 'string', description: 'Operation to perform' },
-    credential: { type: 'string', description: 'Google Slides access token' },
+    oauthCredential: { type: 'string', description: 'Google Slides access token' },
     presentationId: { type: 'string', description: 'Presentation identifier (canonical param)' },
     // Write operation
     slideIndex: { type: 'number', description: 'Slide index to write to' },

@@ -89,10 +89,6 @@ export const account = pgTable(
       table.accountId,
       table.providerId
     ),
-    uniqueUserProvider: uniqueIndex('account_user_provider_unique').on(
-      table.userId,
-      table.providerId
-    ),
   })
 )
 
@@ -158,6 +154,7 @@ export const workflow = pgTable(
     updatedAt: timestamp('updated_at').notNull(),
     isDeployed: boolean('is_deployed').notNull().default(false),
     deployedAt: timestamp('deployed_at'),
+    isPublicApi: boolean('is_public_api').notNull().default(false),
     runCount: integer('run_count').notNull().default(0),
     lastRunAt: timestamp('last_run_at'),
     variables: json('variables').default('{}'),
@@ -337,6 +334,9 @@ export const workflowExecutionLogs = pgTable(
       table.workspaceId,
       table.startedAt
     ),
+    runningStartedAtIdx: index('workflow_execution_logs_running_started_at_idx')
+      .on(table.startedAt)
+      .where(sql`status = 'running'`),
   })
 )
 
@@ -815,7 +815,6 @@ export const skill = pgTable(
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (table) => ({
-    workspaceIdIdx: index('skill_workspace_id_idx').on(table.workspaceId),
     workspaceNameUnique: uniqueIndex('skill_workspace_name_unique').on(
       table.workspaceId,
       table.name
@@ -1937,7 +1936,6 @@ export const a2aAgent = pgTable(
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (table) => ({
-    workspaceIdIdx: index('a2a_agent_workspace_id_idx').on(table.workspaceId),
     workflowIdIdx: index('a2a_agent_workflow_id_idx').on(table.workflowId),
     createdByIdx: index('a2a_agent_created_by_idx').on(table.createdBy),
     workspaceWorkflowUnique: uniqueIndex('a2a_agent_workspace_workflow_unique').on(
@@ -2021,7 +2019,6 @@ export const a2aPushNotificationConfig = pgTable(
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (table) => ({
-    taskIdIdx: index('a2a_push_notification_config_task_id_idx').on(table.taskId),
     taskIdUnique: uniqueIndex('a2a_push_notification_config_task_unique').on(table.taskId),
   })
 )
@@ -2095,6 +2092,120 @@ export const usageLog = pgTable(
   })
 )
 
+export const credentialTypeEnum = pgEnum('credential_type', [
+  'oauth',
+  'env_workspace',
+  'env_personal',
+])
+
+export const credential = pgTable(
+  'credential',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspace.id, { onDelete: 'cascade' }),
+    type: credentialTypeEnum('type').notNull(),
+    displayName: text('display_name').notNull(),
+    description: text('description'),
+    providerId: text('provider_id'),
+    accountId: text('account_id').references(() => account.id, { onDelete: 'cascade' }),
+    envKey: text('env_key'),
+    envOwnerUserId: text('env_owner_user_id').references(() => user.id, { onDelete: 'cascade' }),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => ({
+    workspaceIdIdx: index('credential_workspace_id_idx').on(table.workspaceId),
+    typeIdx: index('credential_type_idx').on(table.type),
+    providerIdIdx: index('credential_provider_id_idx').on(table.providerId),
+    accountIdIdx: index('credential_account_id_idx').on(table.accountId),
+    envOwnerUserIdIdx: index('credential_env_owner_user_id_idx').on(table.envOwnerUserId),
+    workspaceAccountUnique: uniqueIndex('credential_workspace_account_unique')
+      .on(table.workspaceId, table.accountId)
+      .where(sql`account_id IS NOT NULL`),
+    workspaceEnvUnique: uniqueIndex('credential_workspace_env_unique')
+      .on(table.workspaceId, table.type, table.envKey)
+      .where(sql`type = 'env_workspace'`),
+    workspacePersonalEnvUnique: uniqueIndex('credential_workspace_personal_env_unique')
+      .on(table.workspaceId, table.type, table.envKey, table.envOwnerUserId)
+      .where(sql`type = 'env_personal'`),
+    oauthSourceConstraint: check(
+      'credential_oauth_source_check',
+      sql`(type <> 'oauth') OR (account_id IS NOT NULL AND provider_id IS NOT NULL)`
+    ),
+    workspaceEnvSourceConstraint: check(
+      'credential_workspace_env_source_check',
+      sql`(type <> 'env_workspace') OR (env_key IS NOT NULL AND env_owner_user_id IS NULL)`
+    ),
+    personalEnvSourceConstraint: check(
+      'credential_personal_env_source_check',
+      sql`(type <> 'env_personal') OR (env_key IS NOT NULL AND env_owner_user_id IS NOT NULL)`
+    ),
+  })
+)
+
+export const credentialMemberRoleEnum = pgEnum('credential_member_role', ['admin', 'member'])
+export const credentialMemberStatusEnum = pgEnum('credential_member_status', [
+  'active',
+  'pending',
+  'revoked',
+])
+
+export const credentialMember = pgTable(
+  'credential_member',
+  {
+    id: text('id').primaryKey(),
+    credentialId: text('credential_id')
+      .notNull()
+      .references(() => credential.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    role: credentialMemberRoleEnum('role').notNull().default('member'),
+    status: credentialMemberStatusEnum('status').notNull().default('active'),
+    joinedAt: timestamp('joined_at'),
+    invitedBy: text('invited_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => ({
+    userIdIdx: index('credential_member_user_id_idx').on(table.userId),
+    roleIdx: index('credential_member_role_idx').on(table.role),
+    statusIdx: index('credential_member_status_idx').on(table.status),
+    uniqueMembership: uniqueIndex('credential_member_unique').on(table.credentialId, table.userId),
+  })
+)
+
+export const pendingCredentialDraft = pgTable(
+  'pending_credential_draft',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspace.id, { onDelete: 'cascade' }),
+    providerId: text('provider_id').notNull(),
+    displayName: text('display_name').notNull(),
+    description: text('description'),
+    credentialId: text('credential_id').references(() => credential.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueDraft: uniqueIndex('pending_draft_user_provider_ws').on(
+      table.userId,
+      table.providerId,
+      table.workspaceId
+    ),
+  })
+)
+
 export const credentialSet = pgTable(
   'credential_set',
   {
@@ -2112,7 +2223,6 @@ export const credentialSet = pgTable(
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (table) => ({
-    organizationIdIdx: index('credential_set_organization_id_idx').on(table.organizationId),
     createdByIdx: index('credential_set_created_by_idx').on(table.createdBy),
     orgNameUnique: uniqueIndex('credential_set_org_name_unique').on(
       table.organizationId,
@@ -2145,7 +2255,6 @@ export const credentialSetMember = pgTable(
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (table) => ({
-    credentialSetIdIdx: index('credential_set_member_set_id_idx').on(table.credentialSetId),
     userIdIdx: index('credential_set_member_user_id_idx').on(table.userId),
     uniqueMembership: uniqueIndex('credential_set_member_unique').on(
       table.credentialSetId,
@@ -2208,7 +2317,6 @@ export const permissionGroup = pgTable(
     autoAddNewMembers: boolean('auto_add_new_members').notNull().default(false),
   },
   (table) => ({
-    organizationIdIdx: index('permission_group_organization_id_idx').on(table.organizationId),
     createdByIdx: index('permission_group_created_by_idx').on(table.createdBy),
     orgNameUnique: uniqueIndex('permission_group_org_name_unique').on(
       table.organizationId,
@@ -2326,7 +2434,6 @@ export const userTableRows = pgTable(
   },
   (table) => ({
     tableIdIdx: index('user_table_rows_table_id_idx').on(table.tableId),
-    workspaceIdIdx: index('user_table_rows_workspace_id_idx').on(table.workspaceId),
     dataGinIdx: index('user_table_rows_data_gin_idx').using('gin', table.data),
     workspaceTableIdx: index('user_table_rows_workspace_table_idx').on(
       table.workspaceId,

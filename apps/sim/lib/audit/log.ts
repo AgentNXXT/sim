@@ -131,6 +131,8 @@ export const AuditAction = {
   WORKFLOW_DUPLICATED: 'workflow.duplicated',
   WORKFLOW_DEPLOYMENT_ACTIVATED: 'workflow.deployment_activated',
   WORKFLOW_DEPLOYMENT_REVERTED: 'workflow.deployment_reverted',
+  WORKFLOW_LOCKED: 'workflow.locked',
+  WORKFLOW_UNLOCKED: 'workflow.unlocked',
   WORKFLOW_VARIABLES_UPDATED: 'workflow.variables_updated',
 
   // Workspaces
@@ -215,7 +217,7 @@ async function insertAuditLog(params: AuditLogParams): Promise<void> {
       actorName = row?.name ?? undefined
       actorEmail = row?.email ?? undefined
     } catch (error) {
-      logger.debug('Failed to resolve actor info', { error, actorId: params.actorId })
+      logger.warn('Failed to resolve actor info', { error, actorId: params.actorId })
     }
   }
 

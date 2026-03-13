@@ -57,6 +57,7 @@ export const vllmProvider: ProviderConfig = {
 
       const response = await fetch(`${baseUrl}/v1/models`, { headers })
       if (!response.ok) {
+        await response.text().catch(() => {})
         useProvidersStore.getState().setProviderModels('vllm', [])
         logger.warn('vLLM service is not available. The provider will be disabled.')
         return
@@ -189,7 +190,10 @@ export const vllmProvider: ProviderConfig = {
           stream: true,
           stream_options: { include_usage: true },
         }
-        const streamResponse = await vllm.chat.completions.create(streamingParams)
+        const streamResponse = await vllm.chat.completions.create(
+          streamingParams,
+          request.abortSignal ? { signal: request.abortSignal } : undefined
+        )
 
         const streamingResult = {
           stream: createReadableStreamFromVLLMStream(streamResponse, (content, usage) => {
@@ -293,7 +297,10 @@ export const vllmProvider: ProviderConfig = {
         }
       }
 
-      let currentResponse = await vllm.chat.completions.create(payload)
+      let currentResponse = await vllm.chat.completions.create(
+        payload,
+        request.abortSignal ? { signal: request.abortSignal } : undefined
+      )
       const firstResponseTime = Date.now() - initialCallTime
 
       let content = currentResponse.choices[0]?.message?.content || ''
@@ -474,7 +481,10 @@ export const vllmProvider: ProviderConfig = {
 
         const nextModelStartTime = Date.now()
 
-        currentResponse = await vllm.chat.completions.create(nextPayload)
+        currentResponse = await vllm.chat.completions.create(
+          nextPayload,
+          request.abortSignal ? { signal: request.abortSignal } : undefined
+        )
 
         checkForForcedToolUsage(currentResponse, nextPayload.tool_choice)
 
@@ -519,7 +529,10 @@ export const vllmProvider: ProviderConfig = {
           stream: true,
           stream_options: { include_usage: true },
         }
-        const streamResponse = await vllm.chat.completions.create(streamingParams)
+        const streamResponse = await vllm.chat.completions.create(
+          streamingParams,
+          request.abortSignal ? { signal: request.abortSignal } : undefined
+        )
 
         const streamingResult = {
           stream: createReadableStreamFromVLLMStream(streamResponse, (content, usage) => {

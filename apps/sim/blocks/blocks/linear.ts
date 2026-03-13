@@ -1,4 +1,5 @@
 import { LinearIcon } from '@/components/icons'
+import { getScopesForService } from '@/lib/oauth/utils'
 import type { BlockConfig } from '@/blocks/types'
 import { AuthMode } from '@/blocks/types'
 import { normalizeFileInput } from '@/blocks/utils'
@@ -129,9 +130,20 @@ export const LinearBlock: BlockConfig<LinearResponse> = {
       id: 'credential',
       title: 'Linear Account',
       type: 'oauth-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'basic',
       serviceId: 'linear',
-      requiredScopes: ['read', 'write'],
+      requiredScopes: getScopesForService('linear'),
       placeholder: 'Select Linear account',
+      required: true,
+    },
+    {
+      id: 'manualCredential',
+      title: 'Linear Account',
+      type: 'short-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'advanced',
+      placeholder: 'Enter credential ID',
       required: true,
     },
     // Team selector (for most operations)
@@ -141,6 +153,7 @@ export const LinearBlock: BlockConfig<LinearResponse> = {
       type: 'project-selector',
       canonicalParamId: 'teamId',
       serviceId: 'linear',
+      selectorKey: 'linear.teams',
       placeholder: 'Select a team',
       dependsOn: ['credential'],
       mode: 'basic',
@@ -217,6 +230,7 @@ export const LinearBlock: BlockConfig<LinearResponse> = {
       type: 'project-selector',
       canonicalParamId: 'projectId',
       serviceId: 'linear',
+      selectorKey: 'linear.projects',
       placeholder: 'Select a project',
       dependsOn: ['credential', 'teamId'],
       mode: 'basic',
@@ -1504,7 +1518,7 @@ Return ONLY the date string in YYYY-MM-DD format - no explanations, no quotes, n
 
         // Base params that most operations need
         const baseParams: Record<string, any> = {
-          credential: params.credential,
+          oauthCredential: params.oauthCredential,
         }
 
         // Operation-specific param mapping
@@ -2323,7 +2337,7 @@ Return ONLY the date string in YYYY-MM-DD format - no explanations, no quotes, n
   },
   inputs: {
     operation: { type: 'string', description: 'Operation to perform' },
-    credential: { type: 'string', description: 'Linear access token' },
+    oauthCredential: { type: 'string', description: 'Linear access token' },
     teamId: { type: 'string', description: 'Linear team identifier (canonical param)' },
     projectId: { type: 'string', description: 'Linear project identifier (canonical param)' },
     issueId: { type: 'string', description: 'Issue identifier' },

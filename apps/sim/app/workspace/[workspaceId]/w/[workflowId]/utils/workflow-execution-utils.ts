@@ -5,6 +5,86 @@ import { useTerminalConsoleStore } from '@/stores/terminal'
 import { useWorkflowRegistry } from '@/stores/workflows/registry/store'
 import { useWorkflowStore } from '@/stores/workflows/workflow/store'
 
+/**
+ * Updates the active blocks set and ref counts for a single block.
+ * Ref counting ensures a block stays active until all parallel branches for it complete.
+ */
+export function updateActiveBlockRefCount(
+  refCounts: Map<string, number>,
+  activeSet: Set<string>,
+  blockId: string,
+  isActive: boolean
+): void {
+  if (isActive) {
+    refCounts.set(blockId, (refCounts.get(blockId) ?? 0) + 1)
+    activeSet.add(blockId)
+  } else {
+    const next = (refCounts.get(blockId) ?? 1) - 1
+    if (next <= 0) {
+      refCounts.delete(blockId)
+      activeSet.delete(blockId)
+    } else {
+      refCounts.set(blockId, next)
+    }
+  }
+}
+
+/**
+ * Determines if a workflow edge should be marked as active based on its handle and the block output.
+ * Mirrors the executor's EdgeManager.shouldActivateEdge logic on the client side.
+ * Exclude sentinel handles here
+ */
+function shouldActivateEdgeClient(
+  handle: string | null | undefined,
+  output: Record<string, any> | undefined
+): boolean {
+  if (!handle) return true
+
+  if (handle.startsWith('condition-')) {
+    return output?.selectedOption === handle.substring('condition-'.length)
+  }
+
+  if (handle.startsWith('router-')) {
+    return output?.selectedRoute === handle.substring('router-'.length)
+  }
+
+  switch (handle) {
+    case 'error':
+      return !!output?.error
+    case 'source':
+      return !output?.error
+    case 'loop-start-source':
+    case 'loop-end-source':
+    case 'parallel-start-source':
+    case 'parallel-end-source':
+      return true
+    default:
+      return true
+  }
+}
+
+export function markOutgoingEdgesFromOutput(
+  blockId: string,
+  output: Record<string, any> | undefined,
+  workflowEdges: Array<{
+    id: string
+    source: string
+    target: string
+    sourceHandle?: string | null
+  }>,
+  workflowId: string,
+  setEdgeRunStatus: (wfId: string, edgeId: string, status: 'success' | 'error') => void
+): void {
+  const outgoing = workflowEdges.filter((edge) => edge.source === blockId)
+  for (const edge of outgoing) {
+    const handle = edge.sourceHandle
+    if (shouldActivateEdgeClient(handle, output)) {
+      const status = handle === 'error' ? 'error' : output?.error ? 'error' : 'success'
+      setEdgeRunStatus(workflowId, edge.id, status)
+    }
+  }
+}
+
 export interface WorkflowExecutionOptions {
   workflowInput?: any
   onStream?: (se: StreamingExecution) => Promise<void>
@@ -39,6 +119,7 @@ export async function executeWorkflowWithFullLogging(
   const workflowEdges = useWorkflowStore.getState().edges
 
   const activeBlocksSet = new Set<string>()
+  const activeBlockRefCounts = new Map<string, number>()
 
   const payload: any = {
     input: options.workflowInput,
@@ -103,23 +184,33 @@ export async function executeWorkflowWithFullLogging(
 
           switch (event.type) {
             case 'block:started': {
-              activeBlocksSet.add(event.data.blockId)
-              setActiveBlocks(wfId, new Set(activeBlocksSet))
-
-              const incomingEdges = workflowEdges.filter(
-                (edge) => edge.target === event.data.blockId
+              updateActiveBlockRefCount(
+                activeBlockRefCounts,
+                activeBlocksSet,
+                event.data.blockId,
+                true
               )
-              incomingEdges.forEach((edge) => {
-                setEdgeRunStatus(wfId, edge.id, 'success')
-              })
+              setActiveBlocks(wfId, new Set(activeBlocksSet))
               break
             }
 
-            case 'block:completed':
-              activeBlocksSet.delete(event.data.blockId)
+            case 'block:completed': {
+              updateActiveBlockRefCount(
+                activeBlockRefCounts,
+                activeBlocksSet,
+                event.data.blockId,
+                false
+              )
               setActiveBlocks(wfId, new Set(activeBlocksSet))
 
               setBlockRunStatus(wfId, event.data.blockId, 'success')
+              markOutgoingEdgesFromOutput(
+                event.data.blockId,
+                event.data.output,
+                workflowEdges,
+                wfId,
+                setEdgeRunStatus
+              )
 
               addConsole({
                 input: event.data.input || {},
@@ -138,18 +229,34 @@ export async function executeWorkflowWithFullLogging(
                 iterationTotal: event.data.iterationTotal,
                 iterationType: event.data.iterationType,
                 iterationContainerId: event.data.iterationContainerId,
+                childWorkflowBlockId: event.data.childWorkflowBlockId,
+                childWorkflowName: event.data.childWorkflowName,
+                childWorkflowInstanceId: event.data.childWorkflowInstanceId,
               })
 
               if (options.onBlockComplete) {
                 options.onBlockComplete(event.data.blockId, event.data.output).catch(() => {})
               }
               break
+            }
 
-            case 'block:error':
-              activeBlocksSet.delete(event.data.blockId)
+            case 'block:error': {
+              updateActiveBlockRefCount(
+                activeBlockRefCounts,
+                activeBlocksSet,
+                event.data.blockId,
+                false
+              )
               setActiveBlocks(wfId, new Set(activeBlocksSet))
 
               setBlockRunStatus(wfId, event.data.blockId, 'error')
+              markOutgoingEdgesFromOutput(
+                event.data.blockId,
+                { error: event.data.error },
+                workflowEdges,
+                wfId,
+                setEdgeRunStatus
+              )
 
               addConsole({
                 input: event.data.input || {},
@@ -169,8 +276,30 @@ export async function executeWorkflowWithFullLogging(
                 iterationTotal: event.data.iterationTotal,
                 iterationType: event.data.iterationType,
                 iterationContainerId: event.data.iterationContainerId,
+                childWorkflowBlockId: event.data.childWorkflowBlockId,
+                childWorkflowName: event.data.childWorkflowName,
+                childWorkflowInstanceId: event.data.childWorkflowInstanceId,
               })
               break
+            }
+
+            case 'block:childWorkflowStarted': {
+              const { updateConsole } = useTerminalConsoleStore.getState()
+              updateConsole(
+                event.data.blockId,
+                {
+                  childWorkflowInstanceId: event.data.childWorkflowInstanceId,
+                  ...(event.data.iterationCurrent !== undefined && {
+                    iterationCurrent: event.data.iterationCurrent,
+                  }),
+                  ...(event.data.iterationContainerId !== undefined && {
+                    iterationContainerId: event.data.iterationContainerId,
+                  }),
+                },
+                executionId
+              )
+              break
+            }
 
             case 'execution:completed':
               executionResult = {

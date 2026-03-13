@@ -1,10 +1,11 @@
 import { MicrosoftPlannerIcon } from '@/components/icons'
+import { getScopesForService } from '@/lib/oauth/utils'
 import type { BlockConfig } from '@/blocks/types'
 import { AuthMode } from '@/blocks/types'
 import type { MicrosoftPlannerResponse } from '@/tools/microsoft_planner/types'
 
 interface MicrosoftPlannerBlockParams {
-  credential: string
+  oauthCredential: string
   accessToken?: string
   planId?: string
   taskId?: string
@@ -61,25 +62,51 @@ export const MicrosoftPlannerBlock: BlockConfig<MicrosoftPlannerResponse> = {
       id: 'credential',
       title: 'Microsoft Account',
       type: 'oauth-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'basic',
       serviceId: 'microsoft-planner',
-      requiredScopes: [
-        'openid',
-        'profile',
-        'email',
-        'Group.ReadWrite.All',
-        'Group.Read.All',
-        'Tasks.ReadWrite',
-        'offline_access',
-      ],
+      requiredScopes: getScopesForService('microsoft-planner'),
       placeholder: 'Select Microsoft account',
     },
+    {
+      id: 'manualCredential',
+      title: 'Microsoft Account',
+      type: 'short-input',
+      canonicalParamId: 'oauthCredential',
+      mode: 'advanced',
+      placeholder: 'Enter credential ID',
+    },
 
-    // Plan ID - for various operations
+    // Plan selector - basic mode
+    {
+      id: 'planSelector',
+      title: 'Plan',
+      type: 'project-selector',
+      canonicalParamId: 'planId',
+      serviceId: 'microsoft-planner',
+      selectorKey: 'microsoft.planner.plans',
+      selectorAllowSearch: false,
+      placeholder: 'Select a plan',
+      dependsOn: ['credential'],
+      mode: 'basic',
+      condition: {
+        field: 'operation',
+        value: ['create_task', 'read_task', 'read_plan', 'list_buckets', 'create_bucket'],
+      },
+      required: {
+        field: 'operation',
+        value: ['read_plan', 'list_buckets', 'create_bucket', 'create_task'],
+      },
+    },
+
+    // Plan ID - advanced mode
     {
       id: 'planId',
       title: 'Plan ID',
       type: 'short-input',
+      canonicalParamId: 'planId',
       placeholder: 'Enter the plan ID',
+      mode: 'advanced',
       condition: {
         field: 'operation',
         value: ['create_task', 'read_task', 'read_plan', 'list_buckets', 'create_bucket'],
@@ -98,8 +125,9 @@ export const MicrosoftPlannerBlock: BlockConfig<MicrosoftPlannerResponse> = {
       type: 'file-selector',
       placeholder: 'Select a task',
       serviceId: 'microsoft-planner',
+      selectorKey: 'microsoft.planner',
       condition: { field: 'operation', value: ['read_task'] },
-      dependsOn: ['credential', 'planId'],
+      dependsOn: ['credential', 'planSelector'],
       mode: 'basic',
       canonicalParamId: 'readTaskId',
     },
@@ -350,7 +378,7 @@ Return ONLY the timestamp string - no explanations, no quotes, no extra text.`,
       },
       params: (params) => {
         const {
-          credential,
+          oauthCredential,
           operation,
           groupId,
           planId,
@@ -375,7 +403,7 @@ Return ONLY the timestamp string - no explanations, no quotes, no extra text.`,
 
         const baseParams: MicrosoftPlannerBlockParams = {
           ...rest,
-          credential,
+          oauthCredential,
         }
 
         // Handle different task ID fields based on operation
@@ -560,7 +588,7 @@ Return ONLY the timestamp string - no explanations, no quotes, no extra text.`,
   },
   inputs: {
     operation: { type: 'string', description: 'Operation to perform' },
-    credential: { type: 'string', description: 'Microsoft account credential' },
+    oauthCredential: { type: 'string', description: 'Microsoft account credential' },
     groupId: { type: 'string', description: 'Microsoft 365 group ID' },
     planId: { type: 'string', description: 'Plan ID' },
     readTaskId: { type: 'string', description: 'Task ID for read operation' },
